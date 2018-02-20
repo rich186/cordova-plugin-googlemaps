@@ -64,6 +64,9 @@
     <js-module name="Map" src="www/Map.js">
       <runs />
     </js-module>
+    <js-module name="MapsApi" src="www/MapsApi.js">
+      <runs />
+    </js-module>
     <js-module name="event" src="www/event.js">
       <runs />
     </js-module>

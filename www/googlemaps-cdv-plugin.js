@@ -1,4 +1,7 @@
 /* global cordova, plugin, CSSPrimitiveValue */
+var MapsApi = require('./MapsApi');
+var mapsApi = new MapsApi();
+
 var cordova_exec = require('cordova/exec');
 var isSuspended = false;
 if (typeof Array.prototype.forEach !== "function") {
@@ -40,17 +43,14 @@ if (typeof Array.prototype.map !== "function") {
 
 if (!cordova) {
   document.addEventListener("deviceready", function() {
-    isSuspended = true;
-    cordova_exec(null, null, 'CordovaGoogleMaps', 'pause', []);
+    mapsApi.pause();
   }, {
     once: true
   });
 } else {
   var MAP_CNT = 0;
 
-  var argscheck = require('cordova/argscheck'),
-      utils = require('cordova/utils'),
-      event = require('./event'),
+  var event = require('./event'),
       common = require('./Common'),
       BaseClass = require('./BaseClass'),
       BaseArrayClass = require('./BaseArrayClass');
