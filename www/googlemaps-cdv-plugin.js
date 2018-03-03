@@ -5,9 +5,9 @@ var mapsApi = new MapsApi();
 var cordova_exec = require('cordova/exec');
 var execCmd = require("./commandQueueExecutor");
 var pluginInit = require("./pluginInit");
+var MapFactory = require("./MapFactory");
 
 var isSuspended = false;
-
 
 if (!cordova) {
   document.addEventListener("deviceready", function() {
@@ -16,7 +16,6 @@ if (!cordova) {
     once: true
   });
 } else {
-  var MAP_CNT = 0;
 
   var event = require('./event'),
       common = require('./Common'),
@@ -43,10 +42,6 @@ if (!cordova) {
   var Environment = require('./Environment');
   var MapTypeId = require('./MapTypeId');
 
-  var INTERVAL_TIMER = null;
-  var MAPS = {};
-  var saltHash = Math.floor(Math.random() * Date.now());
-
   // The pluginInit.js must execute before loading HTML is completed.
   pluginInit();
 
@@ -72,6 +67,7 @@ if (!cordova) {
     function followMapDivPositionOnly(opts) {
       opts = opts || {};
       var mapRects = {};
+      var MAPS = MapFactory.getMaps();
       var mapIDs = Object.keys(MAPS);
       var changed = false;
       var mapId, map;
@@ -139,6 +135,7 @@ if (!cordova) {
       if (!node || !node.querySelectorAll) {
         return;
       }
+      var MAPS = MapFactory.getMaps();
       var elemId, mapId;
       var children = node.querySelectorAll('[__pluginDomId]');
       if (children && children.length > 0) {
@@ -251,13 +248,14 @@ if (!cordova) {
     //----------------------------------------------
     // Send the DOM hierarchy to native side
     //----------------------------------------------
-    var domPositions = {};
+    var DomObserver = require("./DomObserver");
+    var domPositions = DomObserver.getDomPositions();
     var shouldUpdate = false;
     var doNotTrace = false;
     var checkRequested = false;
 
     function putHtmlElements() {
-      var mapIDs = Object.keys(MAPS);
+      var MAPS = MapFactory.getMaps();
       if (isChecking) {
         checkRequested = true;
         return;
@@ -282,7 +280,7 @@ if (!cordova) {
       //-------------------------------------------
       var touchableMapList, i, mapId, map;
       touchableMapList = [];
-      mapIDs = Object.keys(MAPS);
+      var mapIDs = Object.keys(MAPS);
       for (i = 0; i < mapIDs.length; i++) {
         mapId = mapIDs[i];
         map = MAPS[mapId];
@@ -548,202 +546,7 @@ if (!cordova) {
       BaseClass: BaseClass,
       BaseArrayClass: BaseArrayClass,
       Map: {
-          getMap: function(div, mapOptions) {
-              var mapId, elem, elemId;
-              if (common.isDom(div)) {
-                mapId = div.getAttribute("__pluginMapId");
-                if (!mapOptions || mapOptions.visible !== false) {
-                  // Add gray color until the map is displayed.
-                  div.style.backgroundColor = "rgba(200, 200, 200, 0.5)";
-                }
-              }
-              if (mapId && MAPS[mapId].getDiv() !== div) {
-              //console.log("--->different mapdiv = " + mapId, MAPS[mapId].getDiv(), div);
-                elem = MAPS[mapId].getDiv();
-                while(elem && elem.nodeType === Node.ELEMENT_NODE) {
-                  elemId = elem.getAttribute("__pluginDomId");
-                  if (elemId && elemId in domPositions) {
-                    domPositions[elemId].containMapIDs = domPositions[elemId].containMapIDs || {};
-                    delete domPositions[elemId].containMapIDs[mapId];
-                    if ((Object.keys(domPositions[elemId].containMapIDs).length) < 1) {
-                      delete domPositions[elemId];
-                    }
-                  }
-                  elem = elem.parentNode;
-                }
-                MAPS[mapId].remove();
-                mapId = undefined;
-              }
-              if (mapId && mapId in MAPS) {
-                //--------------------------------------------------
-                // Backward compatibility for v1
-                //
-                // If the div is already recognized as map div,
-                // return the map instance
-                //--------------------------------------------------
-                return MAPS[mapId];
-              } else {
-                mapId = "map_" + MAP_CNT + "_" + saltHash;
-              }
-
-              var map = new Map(mapId, execCmd);
-
-              // Catch all events for this map instance, then pass to the instance.
-              document.addEventListener(mapId, nativeCallback.bind(map));
-              map.on('div_changed', function(oldDiv, newDiv) {
-                if (common.isDom(oldDiv)) {
-                  oldDiv.removeAttribute('__pluginMapId');
-                  var ele = oldDiv;
-                  while(ele && ele != document.body.parentNode) {
-                    elemId = ele.getAttribute('__pluginDomId');
-                    if (elemId) {
-                      domPositions[elemId].containMapIDs = domPositions[elemId].containMapIDs || {};
-                      delete domPositions[elemId].containMapIDs[mapId];
-                      if ((Object.keys(domPositions[elemId].containMapIDs)).length < 1) {
-                        delete domPositions[elemId];
-                      }
-                    }
-                    ele.removeAttribute('__pluginDomId');
-                    if (ele.classList) {
-                      ele.classList.remove('_gmaps_cdv_');
-                    } else if (ele.className) {
-                      ele.className = ele.className.replace(/_gmaps_cdv_/g, "");
-                      ele.className = ele.className.replace(/\s+/g, " ");
-                    }
-                    ele = ele.parentNode;
-                  }
-                }
-
-                if (common.isDom(newDiv)) {
-
-                  elemId = common.getPluginDomId(newDiv);
-                  //console.log("---> setDiv() = " + elemId + ", mapId = " + mapId);
-
-                  elem = newDiv;
-                  var isCached;
-                  while(elem && elem.nodeType === Node.ELEMENT_NODE) {
-                    //
-                    // if (common.getStyle(elem, "-webkit-overflow-scrolling") === "touch") {
-                    //   // Disable scrolling, becase the `scroll` events are not fired.
-                    //   elem.style["-webkit-overflow-scrolling"] = "auto";
-                    //   elem.addEventListener('touchstart', self._onTouchEvents.bind(self));
-                    //   elem.addEventListener('touchmove', self._onTouchEvents.bind(self));
-                    //   elem.addEventListener('touchend', self._onTouchEvents.bind(self));
-                    //   elem.addEventListener('touchcancel', self._onTouchEvents.bind(self));
-                    //   elem.addEventListener('touchleave', self._onTouchEvents.bind(self));
-                    // }
-                    elemId = common.getPluginDomId(elem);
-                    isCached = elemId in domPositions;
-                    domPositions[elemId] = {
-                      pointerEvents: common.getStyle(elem, 'pointer-events'),
-                      isMap: false,
-                      size: common.getDivRect(elem),
-                      zIndex: common.getZIndex(elem),
-                      children: (elemId in domPositions ? domPositions[elemId].children : []),
-                      overflowX: common.getStyle(elem, "overflow-x"),
-                      overflowY: common.getStyle(elem, "overflow-y"),
-                      containMapIDs: (isCached ? domPositions[elemId].containMapIDs : {})
-                    };
-                    domPositions[elemId].containMapIDs[mapId] = 1;
-                    elem = elem.parentNode;
-                  }
-
-                  elemId = common.getPluginDomId(newDiv);
-                  domPositions[elemId].isMap = true;
-                }
-              });
-
-              map.one('remove', function() {
-                  document.removeEventListener(mapId, nativeCallback);
-                  var div = map.getDiv();
-                  if (!div) {
-                    div = document.querySelector("[__pluginMapId='" + mapId + "']");
-                  }
-                  if (div) {
-                    div.removeAttribute('__pluginMapId');
-                  }
-                  //console.log("--->removeMap mapId = " + mapId);
-
-                  var keys = Object.keys(domPositions);
-                  var elemId;
-                  for (var i = 0; i < keys.length; i++) {
-                    elemId = keys[i];
-                    domPositions[elemId].containMapIDs = domPositions[elemId].containMapIDs || {};
-                    delete domPositions[elemId].containMapIDs[mapId];
-                    if ((Object.keys(domPositions[elemId].containMapIDs)).length < 1) {
-                      delete domPositions[elemId];
-                    }
-                  }
-                  MAPS[mapId].destroy();
-                  delete MAPS[mapId];
-                  map = undefined;
-
-                  if ((Object.keys(MAPS)).length === 0) {
-                    common._clearInternalCache();
-
-                    isSuspended = true;
-                    cordova_exec(null, null, 'CordovaGoogleMaps', 'pause', []);
-                  }
-              });
-              MAP_CNT++;
-              MAPS[mapId] = map;
-              isSuspended = false;
-              isThereAnyChange = true;
-              isChecking = false;
-
-
-
-                var args = [mapId];
-                for (var i = 0; i < arguments.length; i++) {
-                    args.push(arguments[i]);
-                }
-
-              if (common.isDom(div)) {
-                div.setAttribute("__pluginMapId", mapId);
-
-                elemId = common.getPluginDomId(div);
-    //console.log("---> map.getMap() = " + elemId + ", mapId = " + mapId);
-
-                elem = div;
-                var isCached;
-                while(elem && elem.nodeType === Node.ELEMENT_NODE) {
-                  elemId = common.getPluginDomId(elem);
-                  isCached = elemId in domPositions;
-                  domPositions[elemId] = {
-                    pointerEvents: common.getStyle(elem, 'pointer-events'),
-                    isMap: false,
-                    size: common.getDivRect(elem),
-                    zIndex: common.getZIndex(elem),
-                    children: [],
-                    overflowX: common.getStyle(elem, "overflow-x"),
-                    overflowY: common.getStyle(elem, "overflow-y"),
-                    containMapIDs: (isCached ? domPositions[elemId].containMapIDs : {})
-                  };
-                  domPositions[elemId].containMapIDs[mapId] = 1;
-                  elem = elem.parentNode;
-                }
-
-                elemId = common.getPluginDomId(div);
-                domPositions[elemId].isMap = true;
-
-                //console.log("--->getMap (start)", JSON.parse(JSON.stringify(domPositions)));
-                cordova_exec(function() {
-                  cordova_exec(function() {
-                    map.getMap.apply(map, args);
-                  }, null, 'CordovaGoogleMaps', 'putHtmlElements', [domPositions]);
-                }, null, 'CordovaGoogleMaps', 'resume', []);
-                //resetTimer({force: true});
-              } else {
-                map.getMap.apply(map, args);
-              }
-
-
-
-
-
-
-              return map;
-          }
+        getMap: MapFactory.getMapInstance
       },
       HtmlInfoWindow: HtmlInfoWindow,
       LatLng: LatLng,
@@ -790,22 +593,4 @@ if (!cordova) {
         once: true
       });
   });
-}
-
-/*****************************************************************************
- * Private functions
- *****************************************************************************/
-
-function onMapResize(event) {
-  var mapIDs = Object.keys(MAPS);
-  for (var i = 0; i< mapIDs.length; i++) {
-    mapId = mapIDs[i];
-    MAPS[mapId].refreshLayout();
-  }
-}
-
-function nativeCallback(params) {
-  var args = params.args || [];
-  args.unshift(params.evtName);
-  this[params.callback].apply(this, args);
 }

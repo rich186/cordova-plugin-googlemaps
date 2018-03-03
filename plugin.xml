@@ -97,6 +97,12 @@
     <js-module name="pluginInit" src="www/pluginInit.js">
       <runs />
     </js-module>
+    <js-module name="MapFactory" src="www/MapFactory.js">
+      <runs />
+    </js-module>
+    <js-module name="DomObserver" src="www/DomObserver.js">
+      <runs />
+    </js-module>
 
     <description>Google Maps native SDK for Android and iOS.
 This plugin allows your application to use the native Google Maps views instead of the Google Maps JavaScript API v3.
